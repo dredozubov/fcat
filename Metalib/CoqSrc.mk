@@ -108,17 +108,17 @@ VFILES:=AssocList.v\
   CoqListFacts.v\
   CoqMSetDecide.v\
   CoqMSetInterface.v\
-  CoqUniquenessTac.v\
   CoqUniquenessTacEx.v\
+  CoqUniquenessTac.v\
   FSetExtra.v\
   FSetWeakNotin.v\
   LibDefaultSimp.v\
   LibLNgen.v\
   LibTactics.v\
-  MSetExtra.v\
-  MSetWeakNotin.v\
+  MetatheoryAtom.v\
   Metatheory.v\
-  MetatheoryAtom.v
+  MSetExtra.v\
+  MSetWeakNotin.v
 
 ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
 -include $(addsuffix .d,$(VFILES))
