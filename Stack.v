@@ -62,6 +62,15 @@ Inductive type : Set :=
 with exp_type : Set :=
 | TArrow : list type -> list type -> exp_type.
 
+Scheme type_ind' := Minimality for type Sort Prop
+with exp_type_ind' := Minimality for exp_type Sort Prop.
+
+Hint Constructors type.
+Hint Constructors exp_type.
+
+Scheme type_ind' := Minimality for type Sort Prop
+with exp_type_ind' := Minimality for exp_type Sort Prop.
+
 Fixpoint type_dec (t1 t2 : type) {struct t1} : { t1 = t2 } + { t1 <> t2 }
 with exp_type_dec (t1 t2 : exp_type) { struct t1} : { t1 = t2 } + { t1 <> t2 }.
 Proof.
@@ -73,6 +82,48 @@ Proof.
   apply list_eq_dec.
   apply type_dec.
 Qed.
+
+Print Forall.
+(* Forall *)
+(*      : forall A : Type, (A -> Prop) -> list A -> Prop *)
+
+(* Inductive Forall (A : Type) (P : A -> Prop) : list A -> Prop := *)
+(*     Forall_nil : Forall P [] *)
+(*   | Forall_cons : forall (x : A) (l : list A), P x -> Forall P l -> Forall P (x :: l) *)
+
+(* For Forall: Argument A is implicit *)
+(* For Forall_nil: Argument A is implicit *)
+(* For Forall_cons: Arguments A, P, l are implicit *)
+(* For Forall: Argument scopes are [type_scope function_scope list_scope] *)
+(* For Forall_nil: Argument scopes are [type_scope function_scope] *)
+(* For Forall_cons: Argument scopes are [type_scope function_scope _ list_scope _ _] *)
+
+
+Section type_ind'.
+  Variable P : type -> Prop.
+
+  Hypothesis TArrow_case : forall (ll lr : list type),
+      Forall P ll -> Forall P lr -> P (TQuot (TArrow ll lr)).
+
+  Fixpoint type_ind' (t : type) : P t
+  with exp_type_ind' (et : exp_type) : P et.
+    apply type_ind'. refine (
+    match et with
+    | TArrow ll lr => TArrow_case ll lr
+                       ((fix list_type_ll_ind' (ls : list type) : Forall P ll :=
+                          match ls with
+                          | nil => I
+                          | cons tr rest => conj (type_ind' tr) (list_type_ll_ind' rest)
+                          end
+                       ) ll)
+                       ((fix list_type_lr_ind' (ls : list type) : Forall P lr :=
+                          match ls with
+                          | nil => I
+                          | cons tr rest => conj (type_ind' tr) (list_type_lr_ind' rest)
+                          end
+                       ) lr)
+    end).
+End type_ind'.
 
 (* Coercion TVar : atom >-> type. *)
 Notation "x ---> y" := (TArrow x y) (at level 70) : type_scope.
