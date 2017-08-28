@@ -6,7 +6,7 @@ Require Import String.
 Require Import Lists.List.
 Import ListNotations.
 
-Require Import Metalib.Metatheory.
+(* Require Import Metalib.Metatheory. *)
 
 
 Set Implicit Arguments.
@@ -21,7 +21,7 @@ Inductive exp : Type :=
   | EBool : bool -> exp
   | FEval : exp
   | FConst
-  | FCompose
+  (* | FCompose *)
   (* | PCons *)
   (* | PUncons *)
   | PLteq
@@ -57,21 +57,49 @@ Inductive data :=
 Inductive type : Set :=
 | TNum
 | TBool
-| TVar : atom -> type
+(* | TVar : atom -> type *)
 | TQuot : exp_type -> type
+with list_t : Set :=
+| tnil
+| tcons : type -> list_t -> list_t
 with exp_type : Set :=
-| TArrow : list type -> list type -> exp_type.
+| TArrow : list_t -> list_t -> exp_type.
+
+Scheme type_ind' := Minimality for type Sort Prop
+with list_t_ind' := Minimality for list_t Sort Prop
+with exp_type_ind' := Minimality for exp_type Sort Prop.
+
+Combined Scheme type_mut_ind from type_ind', list_t_ind', exp_type_ind'.
+
+Check type_mut_ind.
+(* type_mut_ind *)
+(*      : forall P P0 P1 : Prop, *)
+(*        P -> *)
+(*        P -> *)
+(*        (exp_type -> P1 -> P) -> *)
+(*        P0 -> *)
+(*        (type -> P -> list_t -> P0 -> P0) -> *)
+(*        (list_t -> P0 -> list_t -> P0 -> P1) -> *)
+(*        (type -> P) /\ (list_t -> P0) /\ (exp_type -> P1) *)
+
+Check Forall.
+(* Forall *)
+(*      : forall A : Type, (A -> Prop) -> list A -> Prop *)
 
 Fixpoint type_dec (t1 t2 : type) {struct t1} : { t1 = t2 } + { t1 <> t2 }
+with list_t_dec (t1 t2 : list_t) { struct t1} : { t1 = t2 } + { t1 <> t2 }
 with exp_type_dec (t1 t2 : exp_type) { struct t1} : { t1 = t2 } + { t1 <> t2 }.
 Proof.
   decide equality.
+  decide equality.
+  decide equality.
+Qed.
   destruct (type_dec (TQuot t1) (TQuot t2)).
   - inversion e. left. reflexivity.
   - right. intuition. apply n. f_equal. assumption.
 Qed.
 
-Coercion TVar : atom >-> type.
+(* Coercion TVar : atom >-> type. *)
 Notation "x ---> y" := (TArrow x y) (at level 70) : type_scope.
 Notation "---> y" := (TArrow [] y) (at level 70) : type_scope.
 Notation "x --->" := (TArrow x []) (at level 70) : type_scope.
