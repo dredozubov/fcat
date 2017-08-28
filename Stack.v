@@ -59,44 +59,19 @@ Inductive type : Set :=
 | TBool
 (* | TVar : atom -> type *)
 | TQuot : exp_type -> type
-with list_t : Set :=
-| tnil
-| tcons : type -> list_t -> list_t
 with exp_type : Set :=
-| TArrow : list_t -> list_t -> exp_type.
-
-Scheme type_ind' := Minimality for type Sort Prop
-with list_t_ind' := Minimality for list_t Sort Prop
-with exp_type_ind' := Minimality for exp_type Sort Prop.
-
-Combined Scheme type_mut_ind from type_ind', list_t_ind', exp_type_ind'.
-
-Check type_mut_ind.
-(* type_mut_ind *)
-(*      : forall P P0 P1 : Prop, *)
-(*        P -> *)
-(*        P -> *)
-(*        (exp_type -> P1 -> P) -> *)
-(*        P0 -> *)
-(*        (type -> P -> list_t -> P0 -> P0) -> *)
-(*        (list_t -> P0 -> list_t -> P0 -> P1) -> *)
-(*        (type -> P) /\ (list_t -> P0) /\ (exp_type -> P1) *)
-
-Check Forall.
-(* Forall *)
-(*      : forall A : Type, (A -> Prop) -> list A -> Prop *)
+| TArrow : list type -> list type -> exp_type.
 
 Fixpoint type_dec (t1 t2 : type) {struct t1} : { t1 = t2 } + { t1 <> t2 }
-with list_t_dec (t1 t2 : list_t) { struct t1} : { t1 = t2 } + { t1 <> t2 }
 with exp_type_dec (t1 t2 : exp_type) { struct t1} : { t1 = t2 } + { t1 <> t2 }.
 Proof.
   decide equality.
+  destruct t1, t2.
   decide equality.
-  decide equality.
-Qed.
-  destruct (type_dec (TQuot t1) (TQuot t2)).
-  - inversion e. left. reflexivity.
-  - right. intuition. apply n. f_equal. assumption.
+  apply list_eq_dec.
+  apply type_dec.
+  apply list_eq_dec.
+  apply type_dec.
 Qed.
 
 (* Coercion TVar : atom >-> type. *)
