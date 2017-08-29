@@ -119,7 +119,6 @@ Hint Constructors instr_comp.
   (* | INMult *)
 
 Inductive has_type : list instr -> exp_type -> Prop :=
-| HtEmpty : has_type [] ([] ---> [])
 | HtENop : forall A, has_type [IENop] (A ---> A)
 | HtEQuot : forall A B e,
     has_type e (A ---> B) ->
@@ -133,8 +132,8 @@ Inductive has_type : list instr -> exp_type -> Prop :=
 (*   lteq : int int -> bool *)
 | HtPLteq : has_type [IPLteq] ([TNum; TNum] ---> [TBool])
 (*   if : 'A bool ('A -> 'B) ('A -> 'B) -> 'B *)
-| HtPIf : forall A B tq, (* <- FIXME *)
-    has_type [IPIf] (TBool::(TQuot tq)::(TQuot tq)::A ---> B)
+| HtPIf : forall A B,
+    has_type [IPIf] (TBool::(TQuot (A ---> B))::(TQuot (A ---> B))::A ---> B)
 (*   pop : 'a -> *)
 | HtPPop : forall A, has_type [IPPop] (A --->)
 (*   dup : 'a -> 'a 'a *)
@@ -175,7 +174,7 @@ Notation "'DUP'" := (IPDup) : cat_scope.
 Notation "'POP'" := (IPPop) : cat_scope.
 Notation "'SWAP'" := (IPSwap) : cat_scope.
 Notation "'DIP'" := (IPDip) : cat_scope.
-Notation "'IF'" := (IPIf) : cat_scope.
+Notation "'IF?'" := (IPIf) : cat_scope.
 Notation "~" := (IBNot) : cat_scope.
 Notation "&&" := (IBAnd) : cat_scope.
 Notation "||" := (IBOr) : cat_scope.
@@ -197,27 +196,9 @@ Theorem example_eval : has_type [EVAL; {*, DUP} ]  ([TNum] ---> [TNum]).
 Proof. typecheck. Qed.
 
 Theorem example2 : has_type [+; *; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
-Proof.
-  eapply HtSeq.
-  eapply HtSeq.
-  eapply HtSeq.
-  eapply HtSeq.
-  eapply HtSeq.
-  apply HtENum.
-  apply HtENum.
-  apply ICNilR.
-  apply HtEQuot.
-  apply HtPDup.
-  apply ICNilR.
-  apply HtPDip.
-  (* instr_comp (---> ([TNum] ++ [TNum]) ++ [[?G4] ===> [?G4; ?G4]]) *)
-  (*   ((?G6 ===> ?G7) :: ?G5 :: ?G6 ---> ?G5 :: ?G7) *)
-  (*   (?A0 ---> ?B0) *)
-  apply ICComp.
-  constructor.
-Qed.
+Proof. typecheck. Qed.
 
-Theorem example : (has_type ((3 num), (2 num), [DUP, *], DIP, +) (---> [TNum])).
+Theorem example_if : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
 Proof. typecheck. Qed.
 
 Definition ctx : Set := list (atom * type).
