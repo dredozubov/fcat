@@ -6,8 +6,6 @@ Require Import String.
 Require Import Lists.List.
 Import ListNotations.
 
-(* Require Import Metalib.Metatheory. *)
-
 
 Set Implicit Arguments.
 
@@ -42,7 +40,6 @@ Inductive data :=
 Inductive type : Set :=
 | TNum
 | TBool
-(* | TVar : nat -> type *)
 | TQuot : exp_type -> type
 with exp_type : Set :=
 | TArrow : list type -> list type -> exp_type.
@@ -89,34 +86,6 @@ Inductive instr_comp : exp_type -> exp_type -> exp_type -> Prop :=
     instr_comp (A ---> i :: B) (i :: C ---> D) (X ---> Y).
 
 Hint Constructors instr_comp.
-
-
-(* f : (A -> B) g : (B -> C) *)
-(* ------------------------- T-COMPOSE *)
-(* f g : (A -> C) *)
-
-(* f : (A -> B) *)
-(* ----------------------- T-QUOTE *)
-(* [f] : (C -> C (A -> B)) *)
-
-
-  (* | IENop *)
-  (* | IEQuot : list instr -> instr *)
-  (* | IENum : Z -> instr *)
-  (* | IEBool : bool -> instr *)
-  (* | IFEval *)
-  (* | IPLteq *)
-  (* | IPIf *)
-  (* | IPPop *)
-  (* | IPDup *)
-  (* | IPSwap *)
-  (* | IPDip *)
-  (* | IBNot *)
-  (* | IBAnd *)
-  (* | IBOr *)
-  (* | INPlus *)
-  (* | INMinus *)
-  (* | INMult *)
 
 Inductive has_type : list instr -> exp_type -> Prop :=
 | HtENop : forall A, has_type [IENop] (A ---> A)
@@ -169,7 +138,7 @@ Notation "{ x , .. , y }" := (IEQuot (cons x .. (cons y nil) ..)) : cat_scope.
 Notation " x 'num'" := (IENum x) (at level 91) : cat_scope.
 Notation "'TRUE'" := (IEBool true) : cat_scope.
 Notation "'FALSE'" := (IEBool false) : cat_scope.
-Notation "'<='" := (IPLteq) : cat_scope.
+Notation "'.<='" := (IPLteq) : cat_scope.
 Notation "'DUP'" := (IPDup) : cat_scope.
 Notation "'POP'" := (IPPop) : cat_scope.
 Notation "'SWAP'" := (IPSwap) : cat_scope.
@@ -177,127 +146,74 @@ Notation "'DIP'" := (IPDip) : cat_scope.
 Notation "'IF?'" := (IPIf) : cat_scope.
 Notation "~" := (IBNot) : cat_scope.
 Notation "&&" := (IBAnd) : cat_scope.
-Notation "||" := (IBOr) : cat_scope.
-Notation "+" := (INPlus) : cat_scope.
-Notation "-" := (INMinus) : cat_scope.
-Notation "*" := (INMult) : cat_scope.
+Notation ".||" := (IBOr) : cat_scope.
+Notation ".+" := (INPlus) : cat_scope.
+Notation ".-" := (INMinus) : cat_scope.
+Notation ".*" := (INMult) : cat_scope.
 
 Open Scope cat_scope.
 
 Ltac typecheck := repeat econstructor.
 
-Theorem example : has_type [*; (3 num); (2 num)] (---> [TNum]).
+Theorem example : has_type [.*; (3 num); (2 num)] (---> [TNum]).
 Proof. typecheck. Qed.
 
 Theorem example_quot : forall A, has_type [DUP] ([A] ---> [A; A] ).
 Proof. typecheck. Qed.
 
-Theorem example_eval : has_type [EVAL; {*, DUP} ]  ([TNum] ---> [TNum]).
+Theorem example_eval : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example2 : has_type [+; *; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
+Theorem example2 : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
 Proof. typecheck. Qed.
 
 Theorem example_if : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
 Proof. typecheck. Qed.
 
-Definition ctx : Set := list (atom * type).
+(*
 
-Definition Monomorphic a := a = TNum \/ a = TBool.
+1. Typechecker
+2. Evaluator
+3. Progress and preservation
+4. Decidable termination
 
-Definition Polymorphic b := { a : atom & b = TVar a }.
+*)
 
-Inductive All : forall (A : Type), (A -> A -> Prop) -> list A -> list A -> Type :=
-| AllOne : forall A (x y :A) (P : A -> A -> Prop), P x y -> All P [x] [y]
-| AllCons : forall A (x y : A) xs ys (P : A -> A -> Prop), All P xs ys -> All P (x :: xs) (y :: ys).
+Definition stack := list data.
 
-Inductive UnifiableVar : ctx -> type -> type -> Prop :=
-| USame : forall c a, UnifiableVar c a a
-| UConcreteVarL : forall c a b, Monomorphic a -> Polymorphic b -> UnifiableVar c a b
-| UConcreteVarR : forall c a b, Polymorphic a -> Monomorphic b -> UnifiableVar c a b
-| UVars : forall c a b, Polymorphic a -> Polymorphic b ->
-.
-
-| UArrow : forall a b a' b' c, All (Unifiable c) a a' -> All (Unifiable c) b b' ->
-                          Unifiable c (a ---> b) (a' ---> b').
-
-(* PROVE Г |- t : T -> sig . Гi |- sig . t : sig . T *)
-
-Inductive TypeRule : list type -> Prop :=
-| TrQuot : forall (a b c : list type) S new, TypeRule ((a ---> b) :: S) ->
-                      new = (c ---> (c ++ [ a ---> b ])) ->
-                      TypeRule (new :: S)
-| TrCompose : forall a b1 b2 c S,
-    Unifiable b1 b2 ->
-    TypeRule ((a ---> b1) :: (b2 ---> c) :: S) ->
-    TypeRule ((a ---> c) :: S).
-
-
-Definition X : atom := fresh nil.
-Definition Y : atom := fresh [X].
-Definition Z : atom := fresh [X;Y].
-
-
-Section CatTyping2.
-  (* monomorphic type system *)
-
-  Inductive type : Set :=
-  | TNum
-  | TBool
-  | TQuote : itype -> type
-  with itype : Set :=
-  | TArrow : list type -> list type -> itype.
-
-  Notation "X --> Y" := (TArrow X Y).
-  Notation "X -->" := (TArrow X nil) (at level 70, right associativity).
-  Notation "--> Y" := (TArrow nil Y) (at level 70, right associativity).
-  Variables X Y Z : list type.
-  Check (X --> Y).
-  Check ((X -->) --> Y).
-
-  Inductive icompose : itype -> itype -> itype :=
-  | IRightNil : X --> nil ->
-
-End CatTyping2.
-
-Definition stack := list instr.
+Close Scope cat_scope.
 
 Open Scope Z_scope.
 
-Print Datatypes.length.
-Print well_founded.
-
-Inductive EvalR : istack -> dstack -> Prop :=
-  | PlusR : forall ist dst m n, EvalR (NAdd :: ist) (DNum n :: DNum m :: dst) ->
-    forall mn, mn = m + n ->
-    EvalR ist (DNum mn :: dst)
+Inductive EvalR : list instr -> stack -> Prop :=
+  | PlusR : forall ist dst m n,
+    EvalR (INPlus :: ist) (DNum n :: DNum m :: dst) ->
+    forall mn, mn = m + n -> EvalR ist (DNum mn :: dst)
   | LteqTrueR : forall ist dst m n, m <= n ->
-                           EvalR (PLteq :: ist) (DNum n :: DNum m :: dst) ->
-                           EvalR ist (DBool true :: dst)
+    EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
+    EvalR ist (DBool true :: dst)
   | LteqFalseR : forall ist dst m n, m > n ->
-                           EvalR (PLteq :: ist) (DNum n :: DNum m :: dst) ->
-                           EvalR ist (DBool false :: dst)
-  | PopR : forall ist dst x, EvalR (PPop :: ist) (x :: dst) ->
+    EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
+    EvalR ist (DBool false :: dst)
+  | PopR : forall ist dst x,
+    EvalR (IPPop :: ist) (x :: dst) ->
     EvalR ist dst
-  | DupR : forall ist dst x, EvalR (PDup :: ist) (x :: dst) ->
+  | DupR : forall ist dst x,
+    EvalR (IPDup :: ist) (x :: dst) ->
     EvalR ist (x :: x :: dst)
-  | SwapR : forall ist dst x y, EvalR (PSwap :: ist) (x :: y :: dst) ->
+  | SwapR : forall ist dst x y,
+    EvalR (IPSwap :: ist) (x :: y :: dst) ->
     EvalR ist (y :: x :: dst)
-  | ConstR : forall ist dst x, EvalR (FConst :: ist) (x :: dst) ->
-    EvalR ist (DQuot [EConst x] :: dst)
-  | ComposeR : forall ist dst f g, EvalR (FCompose :: ist) (DQuot f :: DQuot g :: dst) ->
-    forall fg, fg = f ++ g ->
-    EvalR ist (DQuot fg :: dst)
-  | EvalQuotR : forall ist dst f, EvalR (FEval :: ist) (DQuot f :: dst) ->
+  | EvalQuotR : forall ist dst f, EvalR (IFEval :: ist) (DQuot f :: dst) ->
     forall ist', ist' = f ++ ist ->
     EvalR ist' dst
-  | DipR : forall ist dst f x, EvalR (PDip :: ist) (DQuot f :: x :: dst) ->
+  | DipR : forall ist dst f x, EvalR (IPDip :: ist) (DQuot f :: x :: dst) ->
     forall ist', ist' = f ++ ist ->
     EvalR ist' (x :: dst)
-  | IfTrueR : forall ist dst l r, EvalR (PIf :: ist) (DBool true :: DQuot l :: DQuot r :: dst) ->
+  | IfTrueR : forall ist dst l r, EvalR (IPIf :: ist) (DBool true :: DQuot l :: DQuot r :: dst) ->
     forall ist', ist' = l ++ ist ->
     EvalR ist' dst
-  | IfFalseR : forall ist dst l r, EvalR (PIf :: ist) (DBool false :: DQuot l :: DQuot r :: dst) ->
+  | IfFalseR : forall ist dst l r, EvalR (IPIf :: ist) (DBool false :: DQuot l :: DQuot r :: dst) ->
     forall ist', ist' = r ++ ist ->
     EvalR ist' dst
 .
@@ -305,27 +221,27 @@ Inductive EvalR : istack -> dstack -> Prop :=
 Hint Constructors EvalR.
 
 Section ComputationExamples.
-  Variable i : istack.
-  Variable d : dstack.
+  Variable i : list instr.
+  Variable d : stack.
 
   Example ex_plus :
-     EvalR (NAdd :: i) (DNum 3 :: DNum 2 :: d) -> EvalR i (DNum 5 :: d).
+     EvalR (INPlus :: i) (DNum 3 :: DNum 2 :: d) -> EvalR i (DNum 5 :: d).
   eauto. Qed.
 
   Example ex_lteq_true : forall (m n : Z), m <= n ->
-                                 EvalR (PLteq :: i) (DNum n :: DNum m :: d) ->
+                                 EvalR (IPLteq :: i) (DNum n :: DNum m :: d) ->
                                  EvalR i (DBool true :: d).
   eauto. Qed.
 
   Example ex_lteq_false : forall (m n : Z), m > n ->
-                                 EvalR (PLteq :: i) (DNum n :: DNum m :: d) ->
+                                 EvalR (IPLteq :: i) (DNum n :: DNum m :: d) ->
                                  EvalR i (DBool false :: d).
   eauto. Qed.
 
-  Example ex_pop : forall (x : data), EvalR (PPop :: i) (x :: d) -> EvalR i d.
+  Example ex_pop : forall (x : data), EvalR (IPPop :: i) (x :: d) -> EvalR i d.
   eauto. Qed.
 
-  Example ex_dup : forall (x : data), EvalR (PDup :: i) (x :: d) -> EvalR i (x :: x :: d).
+  Example ex_dup : forall (x : data), EvalR (IPDup :: i) (x :: d) -> EvalR i (x :: x :: d).
   eauto. Qed.
 End ComputationExamples.
 
