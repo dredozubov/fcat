@@ -99,31 +99,31 @@ Print Forall.
 (* For Forall_cons: Argument scopes are [type_scope function_scope _ list_scope _ _] *)
 
 
-Section type_ind'.
-  Variable P : type -> Prop.
+(* Section type_ind'. *)
+(*   Variable P : type -> Prop. *)
 
-  Hypothesis TArrow_case : forall (ll lr : list type),
-      Forall P ll -> Forall P lr -> P (TQuot (TArrow ll lr)).
+(*   Hypothesis TArrow_case : forall (ll lr : list type), *)
+(*       Forall P ll -> Forall P lr -> P (TQuot (TArrow ll lr)). *)
 
-  Fixpoint type_ind' (t : type) : P t
-  with exp_type_ind' (et : exp_type) : P et.
-    apply type_ind'. refine (
-    match et with
-    | TArrow ll lr => TArrow_case ll lr
-                       ((fix list_type_ll_ind' (ls : list type) : Forall P ll :=
-                          match ls with
-                          | nil => I
-                          | cons tr rest => conj (type_ind' tr) (list_type_ll_ind' rest)
-                          end
-                       ) ll)
-                       ((fix list_type_lr_ind' (ls : list type) : Forall P lr :=
-                          match ls with
-                          | nil => I
-                          | cons tr rest => conj (type_ind' tr) (list_type_lr_ind' rest)
-                          end
-                       ) lr)
-    end).
-End type_ind'.
+(*   Fixpoint type_ind' (t : type) : P t *)
+(*   with exp_type_ind' (et : exp_type) : P et. *)
+(*     apply type_ind'. refine ( *)
+(*     match et with *)
+(*     | TArrow ll lr => TArrow_case ll lr *)
+(*                        ((fix list_type_ll_ind' (ls : list type) : Forall P ll := *)
+(*                           match ls with *)
+(*                           | nil => I *)
+(*                           | cons tr rest => conj (type_ind' tr) (list_type_ll_ind' rest) *)
+(*                           end *)
+(*                        ) ll) *)
+(*                        ((fix list_type_lr_ind' (ls : list type) : Forall P lr := *)
+(*                           match ls with *)
+(*                           | nil => I *)
+(*                           | cons tr rest => conj (type_ind' tr) (list_type_lr_ind' rest) *)
+(*                           end *)
+(*                        ) lr) *)
+(*     end). *)
+(* End type_ind'. *)
 
 (* Coercion TVar : atom >-> type. *)
 Notation "x ---> y" := (TArrow x y) (at level 70) : type_scope.
