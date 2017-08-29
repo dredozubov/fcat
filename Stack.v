@@ -188,31 +188,81 @@ Open Scope Z_scope.
 Inductive EvalR : list instr -> stack -> Prop :=
   | PlusR : forall ist dst m n,
     EvalR (INPlus :: ist) (DNum n :: DNum m :: dst) ->
-    forall mn, mn = m + n -> EvalR ist (DNum mn :: dst)
+    forall mn, mn = m + n ->
+    EvalR ist (DNum mn :: dst)
+
+  | MinusR : forall ist dst m n,
+    EvalR (INMinus :: ist) (DNum n :: DNum m :: dst) ->
+    forall mn, mn = n - m ->
+    EvalR ist (DNum mn :: dst)
+    
+  | MultR : forall ist dst m n,
+    EvalR (INMult :: ist) (DNum n :: DNum m :: dst) ->
+    forall mn, mn = m * n ->
+    EvalR ist (DNum mn :: dst)
+  
+  | AndR : forall ist dst a b,
+    EvalR (IBAnd :: ist) (DBool a :: DBool b :: dst) ->
+    forall c, c = andb a b ->
+    EvalR ist (DBool c :: dst)
+  
+  | OrR : forall ist dst a b,
+    EvalR (IBOr :: ist) (DBool a :: DBool b :: dst) ->
+    forall c, c = orb a b ->
+    EvalR ist (DBool c :: dst)
+  
+  | NotR : forall ist dst a,
+    EvalR (IBNot :: ist) (DBool a :: dst) ->
+    EvalR ist (DBool (negb a) :: dst)
+  
   | LteqTrueR : forall ist dst m n, m <= n ->
     EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
     EvalR ist (DBool true :: dst)
+  
   | LteqFalseR : forall ist dst m n, m > n ->
     EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
     EvalR ist (DBool false :: dst)
+  
   | PopR : forall ist dst x,
     EvalR (IPPop :: ist) (x :: dst) ->
     EvalR ist dst
+
   | DupR : forall ist dst x,
     EvalR (IPDup :: ist) (x :: dst) ->
     EvalR ist (x :: x :: dst)
+
   | SwapR : forall ist dst x y,
     EvalR (IPSwap :: ist) (x :: y :: dst) ->
     EvalR ist (y :: x :: dst)
+
+  | NumR : forall ist dst n,
+    EvalR (IENum n :: ist) dst ->
+    EvalR ist (DNum n :: dst)
+
+  | BoolR : forall ist dst b,
+    EvalR (IEBool b :: ist) dst ->
+    EvalR ist (DBool b :: dst)
+
+  | NopR : forall ist dst,
+    EvalR (IENop :: ist) dst ->
+    EvalR ist dst
+
+  | QuotR : forall ist dst q,
+    EvalR (IEQuot q :: ist) dst ->
+    EvalR ist (DQuot q :: dst)
+
   | EvalQuotR : forall ist dst f, EvalR (IFEval :: ist) (DQuot f :: dst) ->
     forall ist', ist' = f ++ ist ->
     EvalR ist' dst
+
   | DipR : forall ist dst f x, EvalR (IPDip :: ist) (DQuot f :: x :: dst) ->
     forall ist', ist' = f ++ ist ->
     EvalR ist' (x :: dst)
+
   | IfTrueR : forall ist dst l r, EvalR (IPIf :: ist) (DBool true :: DQuot l :: DQuot r :: dst) ->
     forall ist', ist' = l ++ ist ->
     EvalR ist' dst
+
   | IfFalseR : forall ist dst l r, EvalR (IPIf :: ist) (DBool false :: DQuot l :: DQuot r :: dst) ->
     forall ist', ist' = r ++ ist ->
     EvalR ist' dst
