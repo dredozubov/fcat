@@ -13,54 +13,45 @@ Set Implicit Arguments.
 
 (* CAT-like *)
 
-Inductive exp : Type :=
-  | EId
-  | ECompose : exp -> exp -> exp
-  | EQuot : exp -> exp
-  | ENum : Z -> exp
-  | EBool : bool -> exp
-  | FEval : exp
-  | FConst
-  (* | FCompose *)
-  (* | PCons *)
-  (* | PUncons *)
-  | PLteq
-  | PPop (* *)
-  | PDup (* *)
-  | PSwap (* *)
-  | PDip (* *)
-  | BNot
-  | BAnd
-  | BOr
-  | NPlus
-  | NMinus
-  | NMult
+Inductive instr : Type :=
+  | IENop
+  | IEQuot : list instr -> instr
+  | IENum : Z -> instr
+  | IEBool : bool -> instr
+  | IFEval
+  | IPLteq
+  | IPIf
+  | IPPop
+  | IPDup
+  | IPSwap
+  | IPDip
+  | IBNot
+  | IBAnd
+  | IBOr
+  | INPlus
+  | INMinus
+  | INMult
   .
 
 Inductive data :=
 | DNum : Z -> data
 | DBool : bool -> data
-| DQuot : list exp -> data
+| DQuot : list instr -> data
 .
-
-(* Inductive ttag : Set := *)
-(* | texp *)
-(* | tinstr. *)
-
-(* Inductive type : ttag -> Set := *)
-(* | TNum : type texp *)
-(* | TBool : type texp *)
-(* | TVar : atom -> type texp *)
-(* | TQuot : type tinstr -> type texp *)
-(* | TArrow : list (type texp) -> list (type texp) -> type tinstr. *)
 
 Inductive type : Set :=
 | TNum
 | TBool
-(* | TVar : atom -> type *)
+(* | TVar : nat -> type *)
 | TQuot : exp_type -> type
 with exp_type : Set :=
 | TArrow : list type -> list type -> exp_type.
+
+Scheme type_ind' := Minimality for type Sort Prop
+with exp_type_ind' := Minimality for exp_type Sort Prop.
+
+Hint Constructors type.
+Hint Constructors exp_type.
 
 Fixpoint type_dec (t1 t2 : type) {struct t1} : { t1 = t2 } + { t1 <> t2 }
 with exp_type_dec (t1 t2 : exp_type) { struct t1} : { t1 = t2 } + { t1 <> t2 }.
@@ -68,137 +59,163 @@ Proof.
   decide equality.
   destruct t1, t2.
   decide equality.
-  apply list_eq_dec.
-  apply type_dec.
-  apply list_eq_dec.
-  apply type_dec.
+  apply list_eq_dec. apply type_dec.
+  apply list_eq_dec. apply type_dec.
 Qed.
 
 (* Coercion TVar : atom >-> type. *)
+
+(* This arrow uses stack variables *)
 Notation "x ---> y" := (TArrow x y) (at level 70) : type_scope.
 Notation "---> y" := (TArrow [] y) (at level 70) : type_scope.
 Notation "x --->" := (TArrow x []) (at level 70) : type_scope.
+
 Notation "x ===> y" := (TQuot (TArrow x y)) (at level 65) : type_scope.
 Notation "===> y" := (TQuot (TArrow [] y)) (at level 65) : type_scope.
 Notation "x ===>" := (TQuot (TArrow x [])) (at level 65) : type_scope.
 
-Definition abs : exp_type -> list type -> exp_type :=
-  fun t S => match t with
-  | TArrow x y => x ++ S ---> y ++ S
-  end.
+(* Definition abs : exp_type -> list type -> exp_type := *)
+(*   fun t S => match t with *)
+(*   | TArrow x y => x ++ S ---> y ++ S *)
+(*   end. *)
 
+(* Top of the stack is on the left. *)
+(* The last instruction is on the right *)
 Inductive instr_comp : exp_type -> exp_type -> exp_type -> Prop :=
 | ICNilL : forall A B C, instr_comp (A --->) (B ---> C) (A ++ B ---> C)
-| ICNilR : forall A B C, instr_comp (A ---> B) (---> C) (A ---> B ++ C)
+| ICNilR : forall A B C, instr_comp (A ---> B) (---> C) (A ---> C ++ B)
 | ICComp : forall A B C D X Y i,
     instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
     instr_comp (A ---> i :: B) (i :: C ---> D) (X ---> Y).
 
 Hint Constructors instr_comp.
 
-Inductive has_type : exp -> exp_type -> Prop :=
-| HtEId : forall A, has_type EId (A ---> A)
+
 (* f : (A -> B) g : (B -> C) *)
 (* ------------------------- T-COMPOSE *)
 (* f g : (A -> C) *)
-| ICompose : forall A B C D X Y e1 e2,
-    has_type e1 (A ---> B) ->
-    has_type e2 (C ---> D) ->
-    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
-    has_type (ECompose e1 e2) (X ---> Y)
+
 (* f : (A -> B) *)
 (* ----------------------- T-QUOTE *)
 (* [f] : (C -> C (A -> B)) *)
+
+
+  (* | IENop *)
+  (* | IEQuot : list instr -> instr *)
+  (* | IENum : Z -> instr *)
+  (* | IEBool : bool -> instr *)
+  (* | IFEval *)
+  (* | IPLteq *)
+  (* | IPIf *)
+  (* | IPPop *)
+  (* | IPDup *)
+  (* | IPSwap *)
+  (* | IPDip *)
+  (* | IBNot *)
+  (* | IBAnd *)
+  (* | IBOr *)
+  (* | INPlus *)
+  (* | INMinus *)
+  (* | INMult *)
+
+Inductive has_type : list instr -> exp_type -> Prop :=
+| HtEmpty : has_type [] ([] ---> [])
+| HtENop : forall A, has_type [IENop] (A ---> A)
 | HtEQuot : forall A B e,
     has_type e (A ---> B) ->
-    has_type (EQuot e) (---> [A ===> B])
+    has_type [IEQuot e] (---> [A ===> B])
 (*   ENum : -> int *)
-| HtENum : forall n, has_type (ENum n) (---> [TNum])
+| HtENum : forall n, has_type [IENum n] (---> [TNum])
 (*   EBool : -> int *)
-| HtEBool : forall b, has_type (EBool b) (---> [TBool])
+| HtEBool : forall b, has_type [IEBool b] (---> [TBool])
   (* eval : 'A ('A -> 'B) -> 'B *)
-| HtFEval : forall A B, has_type FEval ((A ===> B) :: A ---> B)
-(*   constantly : 'a -> (-> 'a) *)
-| HtFConst : forall a A, has_type FConst (a :: A ---> [ ===> a :: A])
+| HtFEval : forall A B, has_type [IFEval] ((A ===> B) :: A ---> B)
 (*   lteq : int int -> bool *)
-| HtPLteq : has_type PLteq ([TNum; TNum] ---> [TBool])
-(*   pop : 'a -> *)
-| HtPPop : forall A, has_type PPop (A --->)
-(*   dup : 'a -> 'a 'a *)
-| HtPDup : forall a S, has_type PDup (a :: S ---> a :: a :: S)
-(*   swap : 'a 'b -> 'b 'a *)
-| HtPSwap : forall a b, has_type PSwap ([a;b] ---> [b;a])
-(*   dip : 'A 'b '('A -> 'C) -> 'C 'b *)
-| HtPDip : forall A b C, has_type PDip (((A ===> C) :: b :: A) ---> b :: A)
+| HtPLteq : has_type [IPLteq] ([TNum; TNum] ---> [TBool])
 (*   if : 'A bool ('A -> 'B) ('A -> 'B) -> 'B *)
-(* | HtPIf => _ *)
+| HtPIf : forall A B tq, (* <- FIXME *)
+    has_type [IPIf] (TBool::(TQuot tq)::(TQuot tq)::A ---> B)
+(*   pop : 'a -> *)
+| HtPPop : forall A, has_type [IPPop] (A --->)
+(*   dup : 'a -> 'a 'a *)
+| HtPDup : forall a, has_type [IPDup] ([a] ---> a :: [a])
+(*   swap : 'a 'b -> 'b 'a *)
+| HtPSwap : forall a b, has_type [IPSwap] ([a;b] ---> [b;a])
+(*   dip : 'A 'b '('A -> 'C) -> 'C 'b *)
+| HtPDip : forall A b C,
+    has_type [IPDip] (((A ===> C) :: b :: A) ---> b :: C)
 (* not : bool -> bool *)
-| HtBNot : has_type BNot ([TBool] ---> [TBool])
+| HtBNot : has_type [IBNot] ([TBool] ---> [TBool])
 (* and : bool bool -> bool *)
-| HtBAnd : has_type BAnd ([TBool; TBool] ---> [TBool])
+| HtBAnd : has_type [IBAnd] ([TBool; TBool] ---> [TBool])
 (* or : bool bool -> bool *)
-| HtBOr : has_type BOr ([TBool; TBool] ---> [TBool])
+| HtBOr : has_type [IBOr] ([TBool; TBool] ---> [TBool])
 (* plus : num num -> num *)
-| HtNPlus : has_type NPlus ([TNum; TNum] ---> [TNum])
+| HtNPlus : has_type [INPlus] ([TNum; TNum] ---> [TNum])
 (* minus : num num -> num *)
-| HtNMinus : has_type NMinus ([TNum; TNum] ---> [TNum])
+| HtNMinus : has_type [INMinus] ([TNum; TNum] ---> [TNum])
 (* mult : num num -> num *)
-| HtNMult : has_type NMult ([TNum; TNum] ---> [TNum])
-.
+| HtNMult : has_type [INMult] ([TNum; TNum] ---> [TNum])
+| HtSeq : forall A B C D X Y e1 E,
+    has_type E (A ---> B) ->
+    has_type [e1] (C ---> D) ->
+    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
+    has_type (e1 :: E) (X ---> Y).
 
 Hint Constructors has_type.
 
-Notation "'ID'" := EId : cat_scope.
-Notation "'EVAL'" := FEval : cat_scope.
-Notation "x , y" := (ECompose x y) (at level 90, left associativity) : cat_scope.
-Notation "[ x ]" := (EQuot x) : cat_scope.
-Notation " x 'num'" := (ENum x) (at level 91) : cat_scope.
-Notation "'TRUE'" := (EBool true) : cat_scope.
-Notation "'FALSE'" := (EBool false) : cat_scope.
-Notation "'<='" := (PLteq) : cat_scope.
-Notation "'DUP'" := (PDup) : cat_scope.
-Notation "'POP'" := (PPop) : cat_scope.
-Notation "'SWAP'" := (PSwap) : cat_scope.
-Notation "'DIP'" := (PDip) : cat_scope.
-Notation "~" := (BNot) : cat_scope.
-Notation "&&" := (BAnd) : cat_scope.
-Notation "||" := (BOr) : cat_scope.
-Notation "+" := (NPlus) : cat_scope.
-Notation "-" := (NMinus) : cat_scope.
-Notation "*" := (NMult) : cat_scope.
+Notation "'ID'" := IENop : cat_scope.
+Notation "'EVAL'" := IFEval : cat_scope.
+Notation "{ x , .. , y }" := (IEQuot (cons x .. (cons y nil) ..)) : cat_scope.
+Notation " x 'num'" := (IENum x) (at level 91) : cat_scope.
+Notation "'TRUE'" := (IEBool true) : cat_scope.
+Notation "'FALSE'" := (IEBool false) : cat_scope.
+Notation "'<='" := (IPLteq) : cat_scope.
+Notation "'DUP'" := (IPDup) : cat_scope.
+Notation "'POP'" := (IPPop) : cat_scope.
+Notation "'SWAP'" := (IPSwap) : cat_scope.
+Notation "'DIP'" := (IPDip) : cat_scope.
+Notation "'IF'" := (IPIf) : cat_scope.
+Notation "~" := (IBNot) : cat_scope.
+Notation "&&" := (IBAnd) : cat_scope.
+Notation "||" := (IBOr) : cat_scope.
+Notation "+" := (INPlus) : cat_scope.
+Notation "-" := (INMinus) : cat_scope.
+Notation "*" := (INMult) : cat_scope.
 
 Open Scope cat_scope.
 
 Ltac typecheck := repeat econstructor.
 
-Theorem example : has_type ((3 num), (2 num), *) (---> [TNum]).
+Theorem example : has_type [*; (3 num); (2 num)] (---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example_quot : forall A, has_type [DUP] (---> [[A] ===> [A; A]]).
+Theorem example_quot : forall A, has_type [DUP] ([A] ---> [A; A] ).
 Proof. typecheck. Qed.
 
-Theorem example_eval : forall A, has_type ([DUP, *], EVAL)  (---> [[A] ===> [A; A]]).
+Theorem example_eval : has_type [EVAL; {*, DUP} ]  ([TNum] ---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example2 : (has_type ((2 num), (3 num), [DUP], DIP, *, +) (---> [TNum])).
+Theorem example2 : has_type [+; *; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
 Proof.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  Show Proof.
+  eapply HtSeq.
+  eapply HtSeq.
+  eapply HtSeq.
+  eapply HtSeq.
+  eapply HtSeq.
+  apply HtENum.
+  apply HtENum.
+  apply ICNilR.
+  apply HtEQuot.
+  apply HtPDup.
+  apply ICNilR.
+  apply HtPDip.
+  (* instr_comp (---> ([TNum] ++ [TNum]) ++ [[?G4] ===> [?G4; ?G4]]) *)
+  (*   ((?G6 ===> ?G7) :: ?G5 :: ?G6 ---> ?G5 :: ?G7) *)
+  (*   (?A0 ---> ?B0) *)
+  apply ICComp.
+  constructor.
+Qed.
 
 Theorem example : (has_type ((3 num), (2 num), [DUP, *], DIP, +) (---> [TNum])).
 Proof. typecheck. Qed.
