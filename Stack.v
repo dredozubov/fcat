@@ -155,19 +155,19 @@ Open Scope cat_scope.
 
 Ltac typecheck := repeat econstructor.
 
-Theorem example : has_type [.*; (3 num); (2 num)] (---> [TNum]).
+Example num_prg : has_type [.*; (3 num); (2 num)] (---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example_quot : forall A, has_type [DUP] ([A] ---> [A; A] ).
+Example quot_prg : forall A, has_type [DUP] ([A] ---> [A; A] ).
 Proof. typecheck. Qed.
 
-Theorem example_eval : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
+Example eval_prg : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example2 : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
+Example dip_dup_prg : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example_if : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
+Example if_prg : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
 Proof. typecheck. Qed.
 
 (*
@@ -185,26 +185,23 @@ Close Scope cat_scope.
 
 Open Scope Z_scope.
 
-Inductive EvalR : list instr -> stack -> Prop :=
-  | PlusR : forall ist dst m n,
-    EvalR (INPlus :: ist) (DNum n :: DNum m :: dst) ->
-    forall mn, mn = m + n -> EvalR ist (DNum mn :: dst)
-  | LteqTrueR : forall ist dst m n, m <= n ->
-    EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
-    EvalR ist (DBool true :: dst)
-  | LteqFalseR : forall ist dst m n, m > n ->
-    EvalR (IPLteq :: ist) (DNum n :: DNum m :: dst) ->
-    EvalR ist (DBool false :: dst)
-  | PopR : forall ist dst x,
-    EvalR (IPPop :: ist) (x :: dst) ->
-    EvalR ist dst
-  | DupR : forall ist dst x,
-    EvalR (IPDup :: ist) (x :: dst) ->
-    EvalR ist (x :: x :: dst)
-  | SwapR : forall ist dst x y,
-    EvalR (IPSwap :: ist) (x :: y :: dst) ->
-    EvalR ist (y :: x :: dst)
-  | EvalQuotR : forall ist dst f, EvalR (IFEval :: ist) (DQuot f :: dst) ->
+Reserved Notation "i '/' st '||' st'" (at level 40, st at level 39).
+
+Inductive EvalR : instr -> stack -> stack -> Prop :=
+  | PlusR : forall dst m n mn,
+      mn = m + n -> INPlus / (DNum n :: DNum m :: dst) || (DNum mn :: dst)
+  | LteqTrueR : forall dst m n,
+      m <= n -> IPLteq / (DNum n :: DNum m :: dst) || (DBool true :: dst)
+  | LteqFalseR : forall dst m n,
+      m > n -> IPLteq / (DNum n :: DNum m :: dst) || (DBool false :: dst)
+  | PopR : forall dst x, IPPop / (x :: dst) || dst
+  | DupR : forall dst x,
+      IPDup / (x :: dst) || (x :: x :: dst)
+  | SwapR : forall dst x y,
+      IPSwap / (x :: y :: dst) || (y :: x :: dst)
+  | EvalQuotR : forall dst f,
+      IFEval / (DQuot f :: dst) || (
+      EvalR (IFEval :: ist) (DQuot f :: dst) ->
     forall ist', ist' = f ++ ist ->
     EvalR ist' dst
   | DipR : forall ist dst f x, EvalR (IPDip :: ist) (DQuot f :: x :: dst) ->
@@ -216,7 +213,7 @@ Inductive EvalR : list instr -> stack -> Prop :=
   | IfFalseR : forall ist dst l r, EvalR (IPIf :: ist) (DBool false :: DQuot l :: DQuot r :: dst) ->
     forall ist', ist' = r ++ ist ->
     EvalR ist' dst
-.
+  where "i '/' st '||' st'" := (EvalR i st st').
 
 Hint Constructors EvalR.
 
