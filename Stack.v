@@ -187,60 +187,76 @@ Open Scope Z_scope.
 
 Reserved Notation "i '/' st '||' st'" (at level 40, st at level 39).
 
-Inductive EvalR : instr -> stack -> stack -> Prop :=
-  | PlusR : forall dst m n mn,
-      mn = m + n -> INPlus / (DNum n :: DNum m :: dst) || (DNum mn :: dst)
-  | LteqTrueR : forall dst m n,
-      m <= n -> IPLteq / (DNum n :: DNum m :: dst) || (DBool true :: dst)
-  | LteqFalseR : forall dst m n,
-      m > n -> IPLteq / (DNum n :: DNum m :: dst) || (DBool false :: dst)
-  | PopR : forall dst x, IPPop / (x :: dst) || dst
-  | DupR : forall dst x,
-      IPDup / (x :: dst) || (x :: x :: dst)
-  | SwapR : forall dst x y,
-      IPSwap / (x :: y :: dst) || (y :: x :: dst)
-  | EvalQuotR : forall dst f,
-      IFEval / (DQuot f :: dst) || (
-      EvalR (IFEval :: ist) (DQuot f :: dst) ->
-    forall ist', ist' = f ++ ist ->
-    EvalR ist' dst
-  | DipR : forall ist dst f x, EvalR (IPDip :: ist) (DQuot f :: x :: dst) ->
-    forall ist', ist' = f ++ ist ->
-    EvalR ist' (x :: dst)
-  | IfTrueR : forall ist dst l r, EvalR (IPIf :: ist) (DBool true :: DQuot l :: DQuot r :: dst) ->
-    forall ist', ist' = l ++ ist ->
-    EvalR ist' dst
-  | IfFalseR : forall ist dst l r, EvalR (IPIf :: ist) (DBool false :: DQuot l :: DQuot r :: dst) ->
-    forall ist', ist' = r ++ ist ->
-    EvalR ist' dst
+Inductive EvalR : list instr -> stack -> stack -> Prop :=
+  | NopR : forall ist dst rst,
+      ist / dst || rst ->
+      (IENop :: ist) / dst || rst
+  | QuotR : forall ist dst rst q,
+      ist / (DQuot q :: dst) || rst ->
+      (IEQuot q :: ist) / dst || rst
+  | NumR : forall ist dst rst n,
+      ist / (DNum n :: dst) || rst ->
+      (IENum n :: ist) / dst || rst
+  | BoolR : forall ist dst rst b,
+      ist / (DBool b :: dst) || rst ->
+      (IEBool b :: ist) / dst || rst
+  | EvalQuotR : forall ist dst f rst rst',
+      f / dst || rst ->
+      ist / rst || rst' ->
+      (IFEval :: ist) / (DQuot f :: dst) || rst'
+  | LteqTrueR : forall ist dst rst m n,
+      m <= n ->
+      ist / (DBool true :: dst) || rst ->
+      (IPLteq :: ist) / (DNum n :: DNum m :: dst) || rst
+  | LteqFalseR : forall ist dst rst m n,
+      m > n ->
+      ist / (DBool false :: dst) || rst ->
+      (IPLteq :: ist) / (DNum n :: DNum m :: dst) || rst
+  | IfTrueR : forall ist dst rst rst' l quotr,
+      l / dst || rst ->
+      ist / rst || rst' ->
+      (IPIf :: ist) / (DBool true :: DQuot l :: quotr :: dst) || rst'
+  | IfFalseR : forall ist dst rst rst' quotl r,
+      r / dst || rst ->
+      ist / rst || rst' ->
+      (IPIf :: ist) / (DBool true :: quotl :: DQuot r :: dst) || rst'
+  | PopR : forall ist dst rst x,
+      ist / dst || rst ->
+      (IPPop :: ist) / (x :: dst) || rst
+  | DupR : forall ist dst rst x,
+      ist / (x :: x :: dst) || rst ->
+      (IPDup :: ist) / (x :: dst) || rst
+  | SwapR : forall ist dst rst x y,
+      ist / (y :: x :: dst) || rst ->
+      (IPSwap :: ist) / (x :: y :: dst) || rst
+  | DipR : forall ist dst rst rst' f x,
+      f / dst || rst ->
+      ist / rst || rst' ->
+      (IPDip :: ist) / (DQuot f :: x :: dst) || rst'
+  | NotR : forall ist dst rst b,
+      ist / (DBool (negb b) :: dst) || rst ->
+      (IBNot :: ist) / (DBool b :: dst) || rst
+  | AndR : forall ist dst rst b1 b2,
+      ist / (DBool (andb b1 b2) :: dst) || rst ->
+      (IBAnd :: ist) / (DBool b1 :: DBool b2 :: dst) || rst
+  | OrR : forall ist dst rst b1 b2,
+      ist / (DBool (orb b1 b2) :: dst) || rst ->
+      (IBAnd :: ist) / (DBool b1 :: DBool b2 :: dst) || rst
+  | PlusR : forall ist dst rst m n mn,
+      mn = m + n ->
+      ist / (DNum mn :: dst) || rst ->
+      (INPlus :: ist) / (DNum n :: DNum m :: dst) || rst
+  | MinusR : forall ist dst rst m n mn,
+      mn = m - n ->
+      ist / (DNum mn :: dst) || rst ->
+      (INPlus :: ist) / (DNum n :: DNum m :: dst) || rst
+  | MultR : forall ist dst rst m n mn,
+      mn = m * n ->
+      ist / (DNum mn :: dst) || rst ->
+      (INPlus :: ist) / (DNum n :: DNum m :: dst) || rst
   where "i '/' st '||' st'" := (EvalR i st st').
 
 Hint Constructors EvalR.
-
-Section ComputationExamples.
-  Variable i : list instr.
-  Variable d : stack.
-
-  Example ex_plus :
-     EvalR (INPlus :: i) (DNum 3 :: DNum 2 :: d) -> EvalR i (DNum 5 :: d).
-  eauto. Qed.
-
-  Example ex_lteq_true : forall (m n : Z), m <= n ->
-                                 EvalR (IPLteq :: i) (DNum n :: DNum m :: d) ->
-                                 EvalR i (DBool true :: d).
-  eauto. Qed.
-
-  Example ex_lteq_false : forall (m n : Z), m > n ->
-                                 EvalR (IPLteq :: i) (DNum n :: DNum m :: d) ->
-                                 EvalR i (DBool false :: d).
-  eauto. Qed.
-
-  Example ex_pop : forall (x : data), EvalR (IPPop :: i) (x :: d) -> EvalR i d.
-  eauto. Qed.
-
-  Example ex_dup : forall (x : data), EvalR (IPDup :: i) (x :: d) -> EvalR i (x :: x :: d).
-  eauto. Qed.
-End ComputationExamples.
 
 (* big-step evaluator *)
 (* ql stands for quot list *)
