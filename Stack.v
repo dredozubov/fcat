@@ -188,6 +188,8 @@ Open Scope Z_scope.
 Reserved Notation "i '/' st '||' st'" (at level 40, st at level 39).
 
 Inductive EvalR : list instr -> stack -> stack -> Prop :=
+  | EmptyR : forall dst,
+      nil / dst || dst
   | NopR : forall ist dst rst,
       ist / dst || rst ->
       (IENop :: ist) / dst || rst
@@ -231,7 +233,7 @@ Inductive EvalR : list instr -> stack -> stack -> Prop :=
       (IPSwap :: ist) / (x :: y :: dst) || rst
   | DipR : forall ist dst rst rst' f x,
       f / dst || rst ->
-      ist / rst || rst' ->
+      ist / (x :: rst) || rst' ->
       (IPDip :: ist) / (DQuot f :: x :: dst) || rst'
   | NotR : forall ist dst rst b,
       ist / (DBool (negb b) :: dst) || rst ->
@@ -249,14 +251,27 @@ Inductive EvalR : list instr -> stack -> stack -> Prop :=
   | MinusR : forall ist dst rst m n mn,
       mn = m - n ->
       ist / (DNum mn :: dst) || rst ->
-      (INPlus :: ist) / (DNum n :: DNum m :: dst) || rst
+      (INMinus :: ist) / (DNum n :: DNum m :: dst) || rst
   | MultR : forall ist dst rst m n mn,
       mn = m * n ->
       ist / (DNum mn :: dst) || rst ->
-      (INPlus :: ist) / (DNum n :: DNum m :: dst) || rst
+      (INMult :: ist) / (DNum n :: DNum m :: dst) || rst
   where "i '/' st '||' st'" := (EvalR i st st').
 
 Hint Constructors EvalR.
+
+Section ComputationExamples.
+  Variable i : list instr.
+  Variable d : stack.
+
+  Example ex_plus_sing: EvalR [INPlus] [DNum 3; DNum 2] [DNum 5].
+  Proof. repeat econstructor. Qed.
+
+  Example involved :
+    EvalR [IENum 2; IENum 3; IEQuot [IPDup]; IPDip; INMult; INPlus] [] [DNum 8].
+  Proof. repeat econstructor. Qed.
+
+End ComputationExamples.
 
 (* big-step evaluator *)
 (* ql stands for quot list *)
