@@ -79,11 +79,12 @@ Notation "x ===>" := (TQuot (TArrow x [])) (at level 65) : type_scope.
 (* Top of the stack is on the left. *)
 (* The last instruction is on the right *)
 Inductive instr_comp : exp_type -> exp_type -> exp_type -> Prop :=
-| ICNilL : forall A B C, instr_comp (A --->) (B ---> C) (A ++ B ---> C)
-| ICNilR : forall A B C, instr_comp (A ---> B) (---> C) (A ---> C ++ B)
-| ICComp : forall A B C D X Y i,
-    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
-    instr_comp (A ---> i :: B) (i :: C ---> D) (X ---> Y).
+| ICLNilR : forall A B C, instr_comp (A --->  ) (B ---> C) (A ++ B ---> C)
+| ICLNilL : forall A B,   instr_comp (  ---> A) (A ---> B) (---> B)
+| ICRNilR : forall A B,   instr_comp (A ---> B) (B --->  ) (A --->)
+| ICRNilL : forall A B C, instr_comp (A ---> B) (  ---> C) (A ---> C ++ B)
+| ICComp : forall A B C,
+    instr_comp (A ---> B) (B ---> C) (A ---> C).
 
 Hint Constructors instr_comp.
 
@@ -125,8 +126,8 @@ Inductive has_type : list instr -> exp_type -> Prop :=
 (* mult : num num -> num *)
 | HtNMult : has_type [INMult] ([TNum; TNum] ---> [TNum])
 | HtSeq : forall A B C D X Y e1 E,
-    has_type E (A ---> B) ->
-    has_type [e1] (C ---> D) ->
+    has_type [e1] (A ---> B) ->
+    has_type E    (C ---> D) ->
     instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
     has_type (e1 :: E) (X ---> Y).
 
@@ -162,7 +163,17 @@ Theorem example_quot : forall A, has_type [DUP] ([A] ---> [A; A] ).
 Proof. typecheck. Qed.
 
 Theorem example_eval : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
-Proof. typecheck. Qed.
+Proof.
+  econstructor.
+  econstructor.
+  econstructor.
+  econstructor.
+  econstructor.
+  econstructor.
+  econstructor.
+  eapply ICLNilL.
+  econstructor.
+  typecheck. Qed.
 
 Theorem example2 : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
 Proof. typecheck. Qed.
@@ -322,6 +333,99 @@ Section ComputationExamples.
   Example ex_dup : forall (x : data), EvalR (IPDup :: i) (x :: d) -> EvalR i (x :: x :: d).
   eauto. Qed. *)
 End ComputationExamples.
+
+Section Correctness.
+  Print sig.
+
+  (*
+    That's too complicated.
+    Fuck da functions, embrace relations!
+    Failed attempt is left for didactics.
+
+  Definition type_check : forall is : list instr, {t | has_type is t}.
+    refine (fix F (is : list instr) : {t | has_type is t} :=
+    match is return {t | has_type is t} with
+    | [] => _ (* Impossible? *)
+    | [IENop] => exist _ (TArrow [A] [A])
+    | [IEQuot e] => let tq := F e
+      in exist _ (TArrow [] [TQuot (proj1_sig tq)])
+    end).
+  Defined.
+  
+
+  Definition get_type (d : data) : type :=
+    match d with
+    | DNum _ => TNum
+    | DNool _ => TBool
+    | DQuot is => TQuot (type_check is)
+    end.
+  
+
+  Definition stacks_type (dst1 dst2 : list data) :=
+    let tl1 := map get_type dst1;
+        tl2 := map get_type dst2
+    in TArrow tl1 tl2.
+  *)
+
+  Inductive stacks_type : stack -> stack -> exp_type -> Prop :=
+  | SsTEmptyB : stacks_type [] [] (TArrow [] [])
+  | SsTEmptyL : forall A AT,
+      stack_type A AT ->
+      stacks_type [] A (TArrow [] AT)
+  | SsTEmptyR : forall A AT,
+      stack_type A AT ->
+      stacks_type A [] (TArrow AT [])
+  | SsTEmptyN : forall A B AT BT,
+      stack_type A AT ->
+      stack_type B BT ->
+      stacks_type A B (TArrow AT BT)
+  with stack_type : stack -> list type -> Prop :=
+  | StEmpty : stack_type [] []
+  | StNum   : forall n, stack_type [DNum n]  [TNum]
+  | StBool  : forall b, stack_type [DBool b] [TBool]
+  | StQuot  : forall is t,
+      has_type is t ->
+      stack_type [DQuot is] [TQuot t]
+  | StCons  : forall d ds t ts,
+      stack_type [d] t ->
+      stack_type ds ts ->
+      stack_type (d :: ds) (t ++ ts).
+
+  Hint Constructors stack_type.
+  Hint Constructors stacks_type.
+
+  Lemma IENop_type: forall is t, has_type is t -> has_type (IENop :: is) t.
+  Proof.
+    intros.
+    destruct t.
+    eapply HtSeq.
+    eauto.
+    constructor.
+    constructor.
+  Qed.
+
+  Lemma IENop_type_r: forall is t, has_type (IENop :: is) t -> has_type is t.
+  Proof.
+    intros.
+  Admitted.
+
+  Theorem preservation:
+    forall is dst1 dst2 t,
+    stacks_type dst1 dst2 t ->
+    has_type is t ->
+    EvalR is dst1 dst2.
+  Proof.
+    intros.
+    induction is. (* Wrong induction hypothesis? *)
+    - inversion H0.
+    - destruct a.
+      + constructor. apply IHis. apply IENop_type_r. assumption.
+      + constructor. eapply IHis.
+  Qed.
+  
+
+End Correctness.
+
 
 (* big-step evaluator *)
 (* ql stands for quot list *)
