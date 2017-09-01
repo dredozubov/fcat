@@ -411,13 +411,36 @@ Section Correctness.
     assumption.
   Qed.
 
-  Lemma nil_type_nil_data: forall dst, stack_type dst [] -> dst = [].
+  Fixpoint nil_type_nil_data dst : stack_type dst [] -> dst = [].
   Proof.
     intros.
-    inversion H.
+    destruct dst.
     - reflexivity.
-    - apply app_eq_nil in H0.
+    - (* symmetry. eapply nil_cons. *)
+      inversion H.
+      apply app_eq_nil in H2.
+      elim H2.
+      intros.
+      rewrite H6 in H4.
+      apply (nil_type_nil_data dst) in H4.
+      rewrite H4.
+      rewrite H5 in H3.
+      apply (nil_type_nil_data [d]) in H3.
+      assumption.
   Qed.
+
+  (* induction dst.
+  - reflexivity.
+  - (* symmetry. eapply nil_cons. *)
+    inversion H.
+    apply app_eq_nil in H2.
+    elim H2.
+    intros.
+    rewrite H6 in H4.
+    apply IHdst in H4.
+    rewrite H4.
+    rewrite H5 in H3.
+    apply (nil_type_nil_data [a] H3). *)
 
   Theorem preservation:
     forall is dst1 dst2 t,
