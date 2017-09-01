@@ -71,65 +71,76 @@ Notation "x ===> y" := (TQuot (TArrow x y)) (at level 65) : type_scope.
 Notation "===> y" := (TQuot (TArrow [] y)) (at level 65) : type_scope.
 Notation "x ===>" := (TQuot (TArrow x [])) (at level 65) : type_scope.
 
-(* Definition abs : exp_type -> list type -> exp_type := *)
-(*   fun t S => match t with *)
-(*   | TArrow x y => x ++ S ---> y ++ S *)
-(*   end. *)
-
-(* Top of the stack is on the left. *)
-(* The last instruction is on the right *)
-Inductive instr_comp : exp_type -> exp_type -> exp_type -> Prop :=
-| ICLNilR : forall A B C, instr_comp (A --->  ) (B ---> C) (A ++ B ---> C)
-| ICLNilL : forall A B,   instr_comp (  ---> A) (A ---> B) (---> B)
-| ICRNilR : forall A B,   instr_comp (A ---> B) (B --->  ) (A --->)
-| ICRNilL : forall A B C, instr_comp (A ---> B) (  ---> C) (A ---> C ++ B)
-| ICComp : forall A B C,
-    instr_comp (A ---> B) (B ---> C) (A ---> C).
-
-Hint Constructors instr_comp.
 
 Inductive has_type : list instr -> exp_type -> Prop :=
-| HtENop : forall A, has_type [IENop] (A ---> A)
-| HtEQuot : forall A B e,
+| HtNil : forall A, has_type [] (A ---> A)
+| HtENop : forall A B is,
+    has_type is (A ---> B) ->
+    has_type (IENop :: is) (A ---> B)
+| HtEQuot : forall A B C D e is,
     has_type e (A ---> B) ->
-    has_type [IEQuot e] (---> [A ===> B])
+    has_type is ((A ===> B) :: C ---> D) ->
+    has_type (IEQuot e :: is) (C ---> D)
 (*   ENum : -> int *)
-| HtENum : forall n, has_type [IENum n] (---> [TNum])
+| HtENum : forall A B n is,
+    has_type is ((TNum :: A) ---> B) ->
+    has_type (IENum n :: is) (A ---> B)
 (*   EBool : -> int *)
-| HtEBool : forall b, has_type [IEBool b] (---> [TBool])
+| HtEBool : forall A B b is,
+    has_type is ((TBool :: A) ---> B) ->
+    has_type (IEBool b :: is) (A ---> B)
   (* eval : 'A ('A -> 'B) -> 'B *)
-| HtFEval : forall A B, has_type [IFEval] ((A ===> B) :: A ---> B)
+| HtFEval : forall A B C is,
+    has_type is (B ---> C) ->
+    has_type (IFEval :: is) ((A ===> B) :: A ---> C)
 (*   lteq : int int -> bool *)
-| HtPLteq : has_type [IPLteq] ([TNum; TNum] ---> [TBool])
+| HtPLteq : forall A B is,
+    has_type is ((TBool :: A) ---> B) ->
+    has_type (IPLteq :: is) (TNum :: TNum :: A ---> B)
 (*   if : 'A bool ('A -> 'B) ('A -> 'B) -> 'B *)
-| HtPIf : forall A B,
-    has_type [IPIf] (TBool::(TQuot (A ---> B))::(TQuot (A ---> B))::A ---> B)
+| HtPIf : forall A B C is,
+    has_type is (B ---> C) ->
+    has_type (IPIf :: is) (TBool::(TQuot (A ---> B))::(TQuot (A ---> B))::A ---> C)
 (*   pop : 'a -> *)
-| HtPPop : forall A, has_type [IPPop] (A --->)
+| HtPPop : forall A B x is,
+    has_type is (A ---> B) ->
+    has_type (IPPop :: is) (x :: A ---> B)
 (*   dup : 'a -> 'a 'a *)
-| HtPDup : forall a, has_type [IPDup] ([a] ---> a :: [a])
+| HtPDup : forall A B a is,
+    has_type is ((a :: a :: A) ---> B) ->
+    has_type (IPDup :: is) (a :: A ---> B)
 (*   swap : 'a 'b -> 'b 'a *)
-| HtPSwap : forall a b, has_type [IPSwap] ([a;b] ---> [b;a])
+| HtPSwap : forall A B a b is,
+    has_type is (b :: a :: A ---> B) ->
+    has_type (IPSwap :: is) (a :: b :: A ---> B)
 (*   dip : 'A 'b '('A -> 'C) -> 'C 'b *)
-| HtPDip : forall A b C,
-    has_type [IPDip] (((A ===> C) :: b :: A) ---> b :: C)
+| HtPDip : forall A B b C is,
+    has_type is (b :: B ---> C) ->
+    has_type (IPDip :: is) (((A ===> B) :: b :: A) ---> C)
 (* not : bool -> bool *)
-| HtBNot : has_type [IBNot] ([TBool] ---> [TBool])
+| HtBNot : forall A B is,
+    has_type is (TBool :: A ---> B) ->
+    has_type (IBNot :: is) (TBool :: A ---> B)
 (* and : bool bool -> bool *)
-| HtBAnd : has_type [IBAnd] ([TBool; TBool] ---> [TBool])
+| HtBAnd : forall A B is,
+    has_type is (TBool :: A ---> B) ->
+    has_type (IBAnd :: is) (TBool :: TBool :: A ---> B)
 (* or : bool bool -> bool *)
-| HtBOr : has_type [IBOr] ([TBool; TBool] ---> [TBool])
+| HtBOr : forall A B is,
+    has_type is (TBool :: A ---> B) ->
+    has_type (IBOr :: is) (TBool :: TBool :: A ---> B)
 (* plus : num num -> num *)
-| HtNPlus : has_type [INPlus] ([TNum; TNum] ---> [TNum])
+| HtNPlus : forall A B is,
+    has_type is (TNum :: A ---> B) ->
+    has_type (INPlus :: is) (TNum :: TNum :: A ---> B)
 (* minus : num num -> num *)
-| HtNMinus : has_type [INMinus] ([TNum; TNum] ---> [TNum])
+| HtNMinus : forall A B is,
+    has_type is (TNum :: A ---> B) ->
+    has_type (INMinus :: is) (TNum :: TNum :: A ---> B)
 (* mult : num num -> num *)
-| HtNMult : has_type [INMult] ([TNum; TNum] ---> [TNum])
-| HtSeq : forall A B C D X Y e1 E,
-    has_type [e1] (A ---> B) ->
-    has_type E    (C ---> D) ->
-    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
-    has_type (e1 :: E) (X ---> Y).
+| HtNMult : forall A B is,
+    has_type is (TNum :: A ---> B) ->
+    has_type (INMult :: is) (TNum :: TNum :: A ---> B).
 
 Hint Constructors has_type.
 
@@ -156,29 +167,19 @@ Open Scope cat_scope.
 
 Ltac typecheck := repeat econstructor.
 
-Theorem example : has_type [.*; (3 num); (2 num)] (---> [TNum]).
+Theorem example : has_type (rev [.*; (3 num); (2 num)]) (---> [TNum]).
 Proof. typecheck. Qed.
 
 Theorem example_quot : forall A, has_type [DUP] ([A] ---> [A; A] ).
 Proof. typecheck. Qed.
 
-Theorem example_eval : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
-Proof.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  econstructor.
-  eapply ICLNilL.
-  econstructor.
-  typecheck. Qed.
-
-Theorem example2 : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
+Theorem example_eval : has_type [{DUP, .*}; EVAL]  ([TNum] ---> [TNum]).
 Proof. typecheck. Qed.
 
-Theorem example_if : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
+Theorem example2 : has_type (rev [.+; .*; DIP; { DUP }; (2 num); (3 num)]) (---> [TNum]).
+Proof. typecheck. Qed.
+
+Theorem example_if : has_type (rev [IF?; TRUE; { 3 num }; { 2 num }]) (---> [TNum]).
 Proof. typecheck. Qed.
 
 (*
@@ -398,16 +399,25 @@ Section Correctness.
   Proof.
     intros.
     destruct t.
-    eapply HtSeq.
-    eauto.
-    constructor.
-    constructor.
+    eapply HtENop.
+    assumption.
   Qed.
 
   Lemma IENop_type_r: forall is t, has_type (IENop :: is) t -> has_type is t.
   Proof.
     intros.
-  Admitted.
+    destruct t.
+    inversion H.
+    assumption.
+  Qed.
+
+  Lemma nil_type_nil_data: forall dst, stack_type dst [] -> dst = [].
+  Proof.
+    intros.
+    inversion H.
+    - reflexivity.
+    - apply app_eq_nil in H0.
+  Qed.
 
   Theorem preservation:
     forall is dst1 dst2 t,
@@ -417,7 +427,9 @@ Section Correctness.
   Proof.
     intros.
     induction is. (* Wrong induction hypothesis? *)
-    - inversion H0.
+    - destruct t. inversion H0. rewrite <- H3 in H. inversion H.
+      + constructor.
+      + apply nil_type_nil_data.
     - destruct a.
       + constructor. apply IHis. apply IENop_type_r. assumption.
       + constructor. eapply IHis.
