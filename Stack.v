@@ -273,6 +273,13 @@ Section ComputationExamples.
 
 End ComputationExamples.
 
+Lemma IENop_type: forall is t, has_type is t -> has_type (IENop :: is) t.
+Proof.
+  intros.
+  destruct t. eapply HtSeq with (C:=nil); try econstructor; eauto.
+  econstructor.
+Qed.
+
 (* big-step evaluator *)
 (* ql stands for quot list *)
 Fixpoint stack_eval (ql : list istack) (ist : istack) (dst : dstack) {struct ist} : option dstack :=
