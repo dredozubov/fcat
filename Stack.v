@@ -7,7 +7,28 @@ Require Import Lists.List.
 Import ListNotations.
 
 
+(* Utils *)
+
 Set Implicit Arguments.
+Set Asymmetric Patterns.
+
+Inductive maybe (A : Set) (P : A -> Prop) : Set :=
+| Unknown : maybe P
+| Found : forall x : A, P x -> maybe P.
+
+Notation "{{ x | P }}" := (maybe (fun x => P)).
+Notation "??" := (Unknown _).
+Notation "[| x |]" := (Found _ x _).
+Notation "x <- e1 ; e2" := (match e1 with
+                             | Unknown => ??
+                             | Found x _ => e2
+                           end)
+(right associativity, at level 60).
+
+Notation "e1 ;; e2" := (if e1 then e2 else ??)
+  (right associativity, at level 60).
+
+Ltac inv H := inversion H; subst; clear H.
 
 (* CAT-like *)
 
@@ -60,79 +81,98 @@ Proof.
   apply list_eq_dec. apply type_dec.
 Qed.
 
-(* Coercion TVar : atom >-> type. *)
+Hint Resolve type_dec.
+Hint Resolve exp_type_dec.
+
+Definition list_type_dec (l1 l2 : list type) : { l1 = l2 } + { l1 <> l2 }.
+Proof. decide equality. Qed.
 
 (* This arrow uses stack variables *)
-Notation "x ---> y" := (TArrow x y) (at level 70) : type_scope.
-Notation "---> y" := (TArrow [] y) (at level 70) : type_scope.
-Notation "x --->" := (TArrow x []) (at level 70) : type_scope.
+Notation "x --> y" := (TArrow x y) (at level 70) : type_scope.
+Notation "--> y" := (TArrow [] y) (at level 70) : type_scope.
+Notation "x -->" := (TArrow x []) (at level 70) : type_scope.
 
-Notation "x ===> y" := (TQuot (TArrow x y)) (at level 65) : type_scope.
-Notation "===> y" := (TQuot (TArrow [] y)) (at level 65) : type_scope.
-Notation "x ===>" := (TQuot (TArrow x [])) (at level 65) : type_scope.
-
-(* Definition abs : exp_type -> list type -> exp_type := *)
-(*   fun t S => match t with *)
-(*   | TArrow x y => x ++ S ---> y ++ S *)
-(*   end. *)
+Notation "x ==> y" := (TQuot (TArrow x y)) (at level 65) : type_scope.
+Notation "==> y" := (TQuot (TArrow [] y)) (at level 65) : type_scope.
+Notation "x ==>" := (TQuot (TArrow x [])) (at level 65) : type_scope.
 
 (* Top of the stack is on the left. *)
 (* The last instruction is on the right *)
 Inductive instr_comp : exp_type -> exp_type -> exp_type -> Prop :=
-| ICNilL : forall A B C, instr_comp (A --->) (B ---> C) (A ++ B ---> C)
-| ICNilR : forall A B C, instr_comp (A ---> B) (---> C) (A ---> C ++ B)
-| ICComp : forall A B C D X Y i,
-    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
-    instr_comp (A ---> i :: B) (i :: C ---> D) (X ---> Y).
+| ICNilL : forall A B C, instr_comp (A -->) (B --> C) (A ++ B --> C)
+| ICNilR : forall A B C, instr_comp (A --> B) (--> C) (A --> C ++ B)
+| ICCompEq : forall A B C, instr_comp (A --> B) (B --> C) (A --> C)
+| ICComp : forall A B C D t, instr_comp (A --> B) (C --> D) (A --> D) ->
+  instr_comp (A --> t :: B) (t :: C --> D) (A --> D).
 
-Hint Constructors instr_comp.
+Definition compose : forall t1 t2 : exp_type, {{ tc | instr_comp t1 t2 tc }}.
+  Hint Constructors instr_comp.
+  refine (
+      fix T (t1 t2 : exp_type) : {{ tc | instr_comp t1 t2 tc }} :=
+        match t1, t2 with
+        | (A -->), (B --> C) => [| A ++ B --> C |]
+        | (A --> (h::tl)), (--> C) => [| A --> C ++ (h::tl) |]
+        | (A --> (h1::tl1)), ((h2::tl2) --> D) =>
+          type_dec h1 h2;;
+          list_type_dec tl1 tl2;;
+          [| A --> D |]
+        end
+    ); eauto.
+  subst. apply ICComp. econstructor.
+Defined.
 
 Inductive has_type : list instr -> exp_type -> Prop :=
-| HtENop : forall A, has_type [IENop] (A ---> A)
+| HtENop : forall A,
+    (* has_type ist (--> R) -> *)
+    has_type [IENop] (A --> A)
 | HtEQuot : forall A B e,
-    has_type e (A ---> B) ->
-    has_type [IEQuot e] (---> [A ===> B])
-(*   ENum : -> int *)
-| HtENum : forall n, has_type [IENum n] (---> [TNum])
-(*   EBool : -> int *)
-| HtEBool : forall b, has_type [IEBool b] (---> [TBool])
-  (* eval : 'A ('A -> 'B) -> 'B *)
-| HtFEval : forall A B, has_type [IFEval] ((A ===> B) :: A ---> B)
-(*   lteq : int int -> bool *)
-| HtPLteq : has_type [IPLteq] ([TNum; TNum] ---> [TBool])
+    has_type e (A --> B) ->
+    (* has_type ist ([A ==> B] --> R) -> *)
+    has_type [IEQuot e] (--> [A ==> B])
+| HtENum : forall n,
+    (* has_type ist ([TNum] --> R) -> *)
+    has_type [IENum n] (--> [TNum])
+| HtEBool : forall b,
+    (* has_type ist ([TBool] --> R) -> *)
+    has_type [IEBool b] (--> [TBool])
+| HtFEval : forall A B,
+    (* has_type ist (B -->) -> *)
+    has_type [IFEval] ((A ==> B) :: A --> B)
+| HtPLteq :
+    (* has_type ist ([TBool] -->) -> *)
+    has_type [IPLteq] ([TNum; TNum] --> [TBool])
 (*   if : 'A bool ('A -> 'B) ('A -> 'B) -> 'B *)
 | HtPIf : forall A B,
-    has_type [IPIf] (TBool::(TQuot (A ---> B))::(TQuot (A ---> B))::A ---> B)
+    (* has_type ist (TBool::(TQuot (A --> B))::(TQuot (A --> B))::A --> B) -> *)
+    has_type [IPIf] (TBool::(TQuot (A --> B))::(TQuot (A --> B))::A --> B)
 (*   pop : 'a -> *)
-| HtPPop : forall A, has_type [IPPop] (A --->)
+| HtPPop : forall A, has_type [IPPop] (A -->)
 (*   dup : 'a -> 'a 'a *)
-| HtPDup : forall a, has_type [IPDup] ([a] ---> a :: [a])
+| HtPDup : forall a, has_type [IPDup] ([a] --> a :: [a])
 (*   swap : 'a 'b -> 'b 'a *)
-| HtPSwap : forall a b, has_type [IPSwap] ([a;b] ---> [b;a])
+| HtPSwap : forall a b, has_type [IPSwap] ([a;b] --> [b;a])
 (*   dip : 'A 'b '('A -> 'C) -> 'C 'b *)
 | HtPDip : forall A b C,
-    has_type [IPDip] (((A ===> C) :: b :: A) ---> b :: C)
+    has_type [IPDip] (((A ==> C) :: b :: A) --> b :: C)
 (* not : bool -> bool *)
-| HtBNot : has_type [IBNot] ([TBool] ---> [TBool])
+| HtBNot : has_type [IBNot] ([TBool] --> [TBool])
 (* and : bool bool -> bool *)
-| HtBAnd : has_type [IBAnd] ([TBool; TBool] ---> [TBool])
+| HtBAnd : has_type [IBAnd] ([TBool; TBool] --> [TBool])
 (* or : bool bool -> bool *)
-| HtBOr : has_type [IBOr] ([TBool; TBool] ---> [TBool])
+| HtBOr : has_type [IBOr] ([TBool; TBool] --> [TBool])
 (* plus : num num -> num *)
-| HtNPlus : has_type [INPlus] ([TNum; TNum] ---> [TNum])
+| HtNPlus : has_type [INPlus] ([TNum; TNum] --> [TNum])
 (* minus : num num -> num *)
-| HtNMinus : has_type [INMinus] ([TNum; TNum] ---> [TNum])
+| HtNMinus : has_type [INMinus] ([TNum; TNum] --> [TNum])
 (* mult : num num -> num *)
-| HtNMult : has_type [INMult] ([TNum; TNum] ---> [TNum])
+| HtNMult : has_type [INMult] ([TNum; TNum] --> [TNum])
 | HtSeq : forall A B C D X Y e1 E,
-    has_type E (A ---> B) ->
-    has_type [e1] (C ---> D) ->
-    instr_comp (A ---> B) (C ---> D) (X ---> Y) ->
-    has_type (e1 :: E) (X ---> Y).
+    has_type E (A --> B) ->
+    has_type [e1] (C --> D) ->
+    instr_comp (A --> B) (C --> D) (X --> Y) ->
+    has_type (e1 :: E) (X --> Y).
 
-Hint Constructors has_type.
-
-Notation "'ID'" := IENop : cat_scope.
+Notation "'NOP'" := IENop : cat_scope.
 Notation "'EVAL'" := IFEval : cat_scope.
 Notation "{ x , .. , y }" := (IEQuot (cons x .. (cons y nil) ..)) : cat_scope.
 Notation " x 'num'" := (IENum x) (at level 91) : cat_scope.
@@ -153,22 +193,87 @@ Notation ".*" := (INMult) : cat_scope.
 
 Open Scope cat_scope.
 
+  (* | IENop *)
+  (* | IEQuot : list instr -> instr *)
+  (* | IENum : Z -> instr *)
+  (* | IEBool : bool -> instr *)
+  (* | IFEval *)
+  (* | IPLteq *)
+  (* | IPIf *)
+  (* | IPPop *)
+  (* | IPDup *)
+  (* | IPSwap *)
+  (* | IPDip *)
+  (* | IBNot *)
+  (* | IBAnd *)
+  (* | IBOr *)
+  (* | INPlus *)
+  (* | INMinus *)
+  (* | INMult *)
+
+Definition type_check : forall (is : list instr), {{ t | has_type is t }}.
+  refine (
+      fix T (is : list instr) : {{ t | has_type is t }} :=
+        match is with
+        | nil => ??
+        | IENop::ist => t <- T ist; [| t |]
+        | (IEQuot q)::ist =>
+          tq <- T q;
+          ti <- T ist;
+          tc <- compose tq ti;
+          [| tc |]
+        | IENum x :: ist => _
+        | IEBool x :: ist => _
+        | IFEval :: ist => _
+        | IPLteq :: ist => _
+        | IPIf :: ist => _
+        | IPPop :: ist => _
+        | IPDup :: ist => _
+        | IPSwap :: ist => _
+        | IPDip :: ist => _
+        | IBNot :: ist => _
+        | IBAnd :: ist => _
+        | IBOr :: ist => _
+        | INPlus :: ist => _
+        | INMinus :: ist => _
+        | INMult :: ist => _
+        end
+      ); eauto.
+Defined.
+
 Ltac typecheck := repeat econstructor.
 
-Example num_prg : has_type [.*; (3 num); (2 num)] (---> [TNum]).
+Example num_prg : has_type [.*; (3 num); (2 num)] (--> [TNum]).
 Proof. typecheck. Qed.
 
-Example quot_prg : forall A, has_type [DUP] ([A] ---> [A; A] ).
+Example quot_prg : forall A, has_type [DUP] ([A] --> [A; A] ).
 Proof. typecheck. Qed.
 
-Example eval_prg : has_type [EVAL; {.*, DUP} ]  ([TNum] ---> [TNum]).
+Example eval_prg : has_type [EVAL; {.*, DUP} ]  ([TNum] --> [TNum]).
 Proof. typecheck. Qed.
 
-Example dip_dup_prg : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (---> [TNum]).
+Example dip_dup_prg : has_type [.+; .*; DIP; { DUP }; (2 num); (3 num)] (--> [TNum]).
 Proof. typecheck. Qed.
 
-Example if_prg : has_type [IF?; TRUE; { 3 num }; { 2 num }] (---> [TNum]).
+Example if_prg : has_type [IF?; TRUE; { 3 num }; { 2 num }] (--> [TNum]).
 Proof. typecheck. Qed.
+
+Definition typeCheck : forall is : list instr, {{ t | has_type is t }}.
+  Hint Constructors has_type.
+  refine (
+      fix F (is : list instr) : {{ t | has_type is t }} :=
+        match is return {{ t | has_type is t }} with
+        | []         => _
+        | i :: ist   =>
+          t1 <- match i with
+          | IENop => _
+          | IEQuot x => _
+          end;
+          t2 <- F ist;
+          instr_comp t1 t2 _
+        end
+  ); eauto.
+Defined.
 
 (*
 
@@ -221,7 +326,7 @@ Inductive EvalR : list instr -> stack -> stack -> Prop :=
   | IfFalseR : forall ist dst rst rst' quotl r,
       r / dst || rst ->
       ist / rst || rst' ->
-      (IPIf :: ist) / (DBool true :: quotl :: DQuot r :: dst) || rst'
+      (IPIf :: ist) / (DBool false :: quotl :: DQuot r :: dst) || rst'
   | PopR : forall ist dst rst x,
       ist / dst || rst ->
       (IPPop :: ist) / (x :: dst) || rst
@@ -273,11 +378,39 @@ Section ComputationExamples.
 
 End ComputationExamples.
 
-Lemma IENop_type: forall is t, has_type is t -> has_type (IENop :: is) t.
+Lemma IENop_preserves_type_r: forall is t, has_type is t -> has_type (IENop :: is) t.
+Proof.
+  intros. destruct t. eapply HtSeq with (C:=nil); try econstructor; eauto; econstructor.
+Qed.
+
+Hint Resolve IENop_preserves_type_r.
+
+Lemma IENop_preserves_type_l: forall is t, has_type (IENop :: is) t -> has_type is t.
+Proof.
+  intros. generalize dependent is. induction is.
+Qed.
+
+Hint Resolve IENop_preserves_type_l.
+
+Lemma IENop_preserves_type: forall is t, has_type is t <-> has_type (IENop :: is) t.
+Proof.
+  intros. generalize dependent is. split.
+  - intros. eauto.
+  - generalize dependent is. destruct t.
+Qed.
+
+Theorem preservation:
+  forall is dst1 dst2 t,
+  stacks_type dst1 dst2 t ->
+  has_type is t ->
+  EvalR is dst1 dst2.
 Proof.
   intros.
-  destruct t. eapply HtSeq with (C:=nil); try econstructor; eauto.
-  econstructor.
+  induction is. (* Wrong induction hypothesis? *)
+  - inversion H0.
+  - destruct a.
+    + constructor. apply IHis. apply IENop_type_r. assumption.
+    + constructor. eapply IHis.
 Qed.
 
 (* big-step evaluator *)
