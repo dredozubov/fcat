@@ -382,15 +382,16 @@ Section Correctness.
       stacks_type A B (TArrow AT BT)
   with stack_type : stack -> list type -> Prop :=
   | StEmpty : stack_type [] []
-  | StNum   : forall n, stack_type [DNum n]  [TNum]
-  | StBool  : forall b, stack_type [DBool b] [TBool]
-  | StQuot  : forall is t,
+  | StNum   : forall n s t,
+      stack_type s t ->
+      stack_type (DNum n :: s)  (TNum :: t)
+  | StBool  : forall b s t,
+      stack_type s t ->  
+      stack_type (DBool b :: s) (TBool :: t)
+  | StQuot  : forall is t s st,
       has_type is t ->
-      stack_type [DQuot is] [TQuot t]
-  | StCons  : forall d ds t ts,
-      stack_type [d] t ->
-      stack_type ds ts ->
-      stack_type (d :: ds) (t ++ ts).
+      stack_type s st ->
+      stack_type (DQuot is :: s) (TQuot t :: st).
 
   Hint Constructors stack_type.
   Hint Constructors stacks_type.
@@ -418,29 +419,7 @@ Section Correctness.
     - reflexivity.
     - (* symmetry. eapply nil_cons. *)
       inversion H.
-      apply app_eq_nil in H2.
-      elim H2.
-      intros.
-      rewrite H6 in H4.
-      apply (nil_type_nil_data dst) in H4.
-      rewrite H4.
-      rewrite H5 in H3.
-      apply (nil_type_nil_data [d]) in H3.
-      assumption.
   Qed.
-
-  (* induction dst.
-  - reflexivity.
-  - (* symmetry. eapply nil_cons. *)
-    inversion H.
-    apply app_eq_nil in H2.
-    elim H2.
-    intros.
-    rewrite H6 in H4.
-    apply IHdst in H4.
-    rewrite H4.
-    rewrite H5 in H3.
-    apply (nil_type_nil_data [a] H3). *)
 
   Theorem preservation:
     forall is dst1 dst2 t,
