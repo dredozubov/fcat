@@ -1,6 +1,8 @@
 Set Warnings "-notation-overridden,-parsing".
 
 Require Import Init.
+Require Import Coq.Arith.PeanoNat.
+Require Import NArith.
 Require Import ZArith.
 Require Import String.
 Require Import Lists.List.
@@ -40,6 +42,7 @@ Inductive data :=
 Inductive type : Set :=
 | TNum
 | TBool
+| TVar : nat -> type
 | TQuot : exp_type -> type
 with exp_type : Set :=
 | TArrow : list type -> list type -> exp_type.
@@ -54,8 +57,8 @@ Fixpoint type_dec (t1 t2 : type) {struct t1} : { t1 = t2 } + { t1 <> t2 }
 with exp_type_dec (t1 t2 : exp_type) { struct t1} : { t1 = t2 } + { t1 <> t2 }.
 Proof.
   decide equality.
-  destruct t1, t2.
   decide equality.
+  destruct t1, t2; decide equality.
   apply list_eq_dec. apply type_dec.
   apply list_eq_dec. apply type_dec.
 Qed.
@@ -336,20 +339,95 @@ Section ComputationExamples.
 End ComputationExamples.
 
 Section Correctness.
-  Print sig.
 
-  (*
-    That's too complicated.
-    Fuck da functions, embrace relations!
-    Failed attempt is left for didactics.
+  Definition last_ind (l : list nat) : nat :=
+    fold_left (fun m x => max m x) l O.
+  
+  Fixpoint type_to_nat (t : type) : nat :=
+    match t with
+    | TNum => 0
+    | TBool => 0
+    | TVar n => n
+    | TQuot (TArrow l1 l2) => max (last_ind (map type_to_nat l1)) (last_ind (map type_to_nat l2))
+    end.
 
-  Definition type_check : forall is : list instr, {t | has_type is t}.
-    refine (fix F (is : list instr) : {t | has_type is t} :=
-    match is return {t | has_type is t} with
-    | [] => _ (* Impossible? *)
-    | [IENop] => exist _ (TArrow [A] [A])
-    | [IEQuot e] => let tq := F e
-      in exist _ (TArrow [] [TQuot (proj1_sig tq)])
+  Definition fresh_ind (t : exp_type) : nat := 
+    match t with
+      TArrow l1 l2 => 1 + max (last_ind (map type_to_nat l1)) (last_ind (map type_to_nat l2))
+    end.
+
+  Fixpoint tmatch (a b : type) : bool :=
+    match (a, b) with
+    | (TNum, TNum) => true
+    | (TBool, TBool) => true
+    | (TVar n, x) => true
+    | (x, TVar n) => true
+    | (TQuot et1, TQuot et2) => exp_types_match et1 et2
+    | p => false
+    end
+  with types_match (a b : list type) : bool :=
+    forallb (fun p => tmatch (fst p) (snd p)) (combine a b)
+  with exp_types_match (a b : exp_type) : bool :=
+    match (a, b) with
+    | (TArrow a b, TArrow c d) => andb (types_match a c) (types_match b d)
+    end.
+  
+  
+  Definition type_check : forall is : list instr, option (sig (fun t : exp_type => has_type is t)).
+    refine (fix F (is : list instr) : option (sig (fun t : exp_type => has_type is t)) :=
+    match is return option (sig (fun t : exp_type => has_type is t)) with
+    | [] => exist _ (TArrow (TVar 0) (TVar 0)) _
+    | (IENop :: is) => F is
+    | (IEQuot e :: is) => let
+        (TArrow a b, p) := F e;
+        (TArrow (TQuot (TArrow a b) :: c) d, p1) := F is
+      in exist _ (TArrow c d) _
+    | (IENum n :: is) => let
+        (TArrow (TNum :: a) b, p) := F is
+      in exist _ (TArrow a b) _
+    | (IEBool v :: is) => let
+        (TArrow (TBool :: a) b, p) := F is
+      in exist _ (TArrow a b) _
+    | (IFEval :: is) => let
+        (TArrow b c, p) := F is
+      in exist _ (TArrow ((TQuot (TArrow a b)) :: a) c) _
+    | (IPLteq :: is) => let
+        (TArrow (TBool :: a) b, p) := F is
+      in exist _ (TArrow (TNum :: TNum :: a) b) _
+    | (IPIf :: is) => let
+        (TArrow b c, p) := F is
+      in exist _ (TArrow (TBool :: (TQuot (A ---> B)) :: (TQuot (A ---> B)) :: a) c) _
+    | (IPPop :: is) => let
+        (TArrow a b, p) := F is;
+        tvar := TVar (fresh_ind (TArrow a b))
+      in exist _ (TArrow (tvar :: a) b) _
+    | (IPDup :: is) => let
+        (TArrow (x :: x :: a) b, p) := F is;
+      in exist _ (TArrow (x :: a) b) _
+    | (IPSwap :: is) => let
+        (TArrow (x :: y :: a) b, p) := F is;
+      in exist _ (TArrow (y :: x :: a) b) _
+    | (IPDip :: is) => let
+        (TArrow (x :: b) c, p) := F is
+      in exist _ (TArrow ((TQuot (TArrow a b)) :: x :: a) c) _
+    | (IBNot :: is) => let
+        (TArrow (TBool :: a) b, p) := F is
+      in exist _ (TArrow (TBool :: a) b) _
+    | (IBAnd :: is) => let
+        (TArrow (TBool :: a) b, p) := F is
+      in exist _ (TArrow (TBool :: TBool :: a) b) _
+    | (IBOr :: is) => let
+        (TArrow (TBool :: a) b, p) := F is
+      in exist _ (TArrow (TBool :: TBool :: a) b) _
+    | (INPlus :: is) => let
+        (TArrow (TNum :: a) b, p) := F is
+      in exist _ (TArrow (TNum :: TNum :: a) b) _
+    | (INMinus :: is) => let
+        (TArrow (TNum :: a) b, p) := F is
+      in exist _ (TArrow (TNum :: TNum :: a) b) _
+    | (INMult :: is) => let
+        (TArrow (TNum :: a) b, p) := F is
+      in exist _ (TArrow (TNum :: TNum :: a) b) _
     end).
   Defined.
   
@@ -366,7 +444,7 @@ Section Correctness.
     let tl1 := map get_type dst1;
         tl2 := map get_type dst2
     in TArrow tl1 tl2.
-  *)
+ 
 
   Inductive stacks_type : stack -> stack -> exp_type -> Prop :=
   | SsTEmptyB : stacks_type [] [] (TArrow [] [])
@@ -421,22 +499,31 @@ Section Correctness.
       inversion H.
   Qed.
 
+  Theorem eq_stack_eq_type:
+    forall dst A B, stacks_type dst dst (A ---> B) -> A = B.
+  Proof.
+    intros.
+    induction dst.
+    + inversion H.
+      - reflexivity.
+      - inversion H3. reflexivity.
+      - inversion H3. reflexivity.
+      - inversion H4. inversion H5. reflexivity.
+    + inversion H. inversion H4. inversion H5.
+      - (* oops... *)
+  Qed.
+  
+
   Theorem preservation:
     forall is dst1 dst2 t,
-    stacks_type dst1 dst2 t ->
     has_type is t ->
-    EvalR is dst1 dst2.
+    EvalR is dst1 dst2 ->
+    stacks_type dst1 dst2 t.
   Proof.
     intros.
     induction is. (* Wrong induction hypothesis? *)
-    - destruct t. inversion H0. rewrite <- H3 in H. inversion H.
-      + constructor.
-      + apply nil_type_nil_data.
-    - destruct a.
-      + constructor. apply IHis. apply IENop_type_r. assumption.
-      + constructor. eapply IHis.
+    - inversion H0. destruct t. inversion H. apply eq_stack_eq_type.
   Qed.
-  
 
 End Correctness.
 
